@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — BloodConnect</title>
+  <meta name="description" content="Log in to BloodConnect Blood Donation Management System">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="auth-wrapper">
+    <!-- Hero Section -->
+    <div class="auth-hero">
+      <div class="auth-hero-content">
+        <div class="logo-icon">🩸</div>
+        <h1>BloodConnect</h1>
+        <p>A comprehensive Blood Donation Management System connecting donors, hospitals, and blood banks to save lives efficiently.</p>
+        <div style="margin-top:2rem;display:flex;gap:1.5rem;justify-content:center;">
+          <div style="text-align:center;">
+            <div style="font-size:1.6rem;font-weight:800;color:#f87171;">500+</div>
+            <div style="font-size:0.75rem;color:var(--text-muted);">Donors</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:1.6rem;font-weight:800;color:#f87171;">1200+</div>
+            <div style="font-size:0.75rem;color:var(--text-muted);">Lives Saved</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:1.6rem;font-weight:800;color:#f87171;">50+</div>
+            <div style="font-size:0.75rem;color:var(--text-muted);">Hospitals</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Login Form -->
+    <div class="auth-form-section">
+      <div class="auth-form-card">
+        <h2>Welcome Back</h2>
+        <p class="subtitle">Sign in to your account to continue</p>
+
+        <form id="loginForm">
+          <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" class="form-control" placeholder="Enter your username" required autocomplete="username">
+          </div>
+
+          <div class="form-group">
+            <label for="password">Password</label>
+            <div class="password-wrapper">
+              <input type="password" id="password" name="password" class="form-control" placeholder="Enter your password" required autocomplete="current-password">
+              <button type="button" class="password-toggle">👁</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="role">Login As</label>
+            <select id="role" name="role" class="form-control" required>
+              <option value="admin">Administrator</option>
+              <option value="staff">Hospital Staff</option>
+              <option value="donor">Blood Donor</option>
+            </select>
+          </div>
+
+          <div class="form-check">
+            <input type="checkbox" id="remember" name="remember">
+            <label for="remember">Remember me</label>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block btn-lg">Sign In</button>
+        </form>
+
+        <div style="text-align:center;margin-top:1.5rem;">
+          <p style="font-size:0.85rem;color:var(--text-muted);">
+            Don't have an account? <a href="signup.html" style="color:var(--red-light);font-weight:600;">Sign Up</a>
+          </p>
+        </div>
+
+        <div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border-color);">
+          <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.75rem;text-align:center;">Demo Credentials</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;font-size:0.72rem;">
+            <div style="background:var(--bg-input);padding:0.5rem;border-radius:var(--radius-sm);text-align:center;">
+              <div style="color:var(--red-light);font-weight:600;margin-bottom:0.2rem;">Admin</div>
+              <div style="color:var(--text-muted);">admin / admin123</div>
+            </div>
+            <div style="background:var(--bg-input);padding:0.5rem;border-radius:var(--radius-sm);text-align:center;">
+              <div style="color:var(--accent-blue);font-weight:600;margin-bottom:0.2rem;">Staff</div>
+              <div style="color:var(--text-muted);">staff / staff123</div>
+            </div>
+            <div style="background:var(--bg-input);padding:0.5rem;border-radius:var(--radius-sm);text-align:center;">
+              <div style="color:var(--accent-green);font-weight:600;margin-bottom:0.2rem;">Donor</div>
+              <div style="color:var(--text-muted);">donor / donor123</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script src="js/auth.js"></script>
+</body>
+</html>

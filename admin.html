@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel — BloodConnect</title>
+    <meta name="description" content="Admin dashboard for BloodConnect management">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="app-layout">
+        <div class="sidebar-overlay"></div>
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">🩸</div>
+                <div class="sidebar-brand">
+                    <h2>BloodConnect</h2><span>Management System</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section-title">Main</div>
+                <a href="index.html" class="nav-link"><span class="nav-icon">📊</span> Dashboard</a>
+                <a href="donors.html" class="nav-link"><span class="nav-icon">👥</span> Donors</a>
+                <a href="inventory.html" class="nav-link"><span class="nav-icon">🩸</span> Blood Inventory</a>
+                <a href="requests.html" class="nav-link"><span class="nav-icon">📋</span> Requests <span class="badge"
+                        data-badge="requests">0</span></a>
+                <div class="nav-section-title">Administration</div>
+                <a href="admin.html" class="nav-link"><span class="nav-icon">⚙️</span> Admin Panel</a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="avatar">AD</div>
+                    <div class="user-info">
+                        <div class="user-name">Admin User</div>
+                        <div class="user-role">admin</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="top-header">
+                <div class="header-left">
+                    <button class="menu-toggle">☰</button>
+                    <div class="page-title">
+                        <h1>Admin Panel</h1>
+                        <p>System administration and reports</p>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <button class="header-btn">🔔<span class="notif-dot"></span></button>
+                    <button class="logout-btn" onclick="logout()">🚪 Logout</button>
+                </div>
+            </header>
+
+            <div class="page-container">
+                <!-- Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card red">
+                        <div class="stat-icon">👥</div>
+                        <div class="stat-info">
+                            <h3>Total Donors</h3>
+                            <div class="stat-value" id="adminTotalDonors">0</div>
+                        </div>
+                    </div>
+                    <div class="stat-card blue">
+                        <div class="stat-icon">📋</div>
+                        <div class="stat-info">
+                            <h3>Total Requests</h3>
+                            <div class="stat-value" id="adminTotalRequests">0</div>
+                        </div>
+                    </div>
+                    <div class="stat-card green">
+                        <div class="stat-icon">🩸</div>
+                        <div class="stat-info">
+                            <h3>Blood Units</h3>
+                            <div class="stat-value" id="adminTotalUnits">0</div>
+                        </div>
+                    </div>
+                    <div class="stat-card purple">
+                        <div class="stat-icon">👤</div>
+                        <div class="stat-info">
+                            <h3>System Users</h3>
+                            <div class="stat-value" id="adminTotalUsers">0</div>
+                        </div>
+                    </div>
+                    <div class="stat-card amber">
+                        <div class="stat-icon">⏳</div>
+                        <div class="stat-info">
+                            <h3>Pending Requests</h3>
+                            <div class="stat-value" id="adminPendingReqs">0</div>
+                        </div>
+                    </div>
+                    <div class="stat-card cyan">
+                        <div class="stat-icon">💉</div>
+                        <div class="stat-info">
+                            <h3>Total Donations</h3>
+                            <div class="stat-value" id="adminTotalDonations">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="tab-overview">Overview</button>
+                    <button class="tab-btn" data-tab="tab-users">User Management</button>
+                    <button class="tab-btn" data-tab="tab-reports">Reports</button>
+                </div>
+
+                <!-- Tab: Overview -->
+                <div class="tab-content active" id="tab-overview">
+                    <div class="grid-2" style="margin-bottom:1.5rem;">
+                        <!-- Blood Group Distribution Chart -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>📊 Blood Group Distribution</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-wrapper"><canvas id="bloodGroupChart"></canvas></div>
+                            </div>
+                        </div>
+                        <!-- Donation Trends -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>📈 Donation Trends</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-wrapper"><canvas id="donationChart"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Activity Feed -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>🕒 Recent Activity</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="activity-list" id="adminActivity"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: User Management -->
+                <div class="tab-content" id="tab-users">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>👤 System Users</h3>
+                            <button class="btn btn-primary" onclick="openModal('addUserModal')">+ Add User</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Name</th>
+                                            <th>Username</th>
+                                            <th>Email</th>
+                                            <th>Role</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="userTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: Reports -->
+                <div class="tab-content" id="tab-reports">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>📊 Generate System Report</h3>
+                            <button class="btn btn-primary" id="generateReportBtn">Generate Report</button>
+                        </div>
+                        <div class="card-body" id="reportOutput">
+                            <div class="empty-state">
+                                <div class="empty-icon">📊</div>
+                                <h3>No report generated</h3>
+                                <p>Click "Generate Report" to create a comprehensive system report with stats, charts,
+                                    and alerts.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add User Modal -->
+    <div class="modal-overlay" id="addUserModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Add New User</h3>
+                <button class="modal-close" onclick="closeModal('addUserModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="addUserForm">
+                    <div class="form-group">
+                        <label>Full Name *</label>
+                        <input type="text" name="newUserName" class="form-control" placeholder="Full name" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Username *</label>
+                            <input type="text" name="newUserUsername" class="form-control" placeholder="Username"
+                                required>
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" name="newUserEmail" class="form-control" placeholder="Email">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Password *</label>
+                            <input type="password" name="newUserPassword" class="form-control" placeholder="Password"
+                                required>
+                        </div>
+                        <div class="form-group">
+                            <label>Role *</label>
+                            <select name="newUserRole" class="form-control" required>
+                                <option value="">Select role</option>
+                                <option value="admin">Admin</option>
+                                <option value="staff">Staff</option>
+                                <option value="donor">Donor</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer" style="padding:1rem 0 0;border-top:none;">
+                        <button type="button" class="btn btn-secondary"
+                            onclick="closeModal('addUserModal')">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Create User</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+
+</html>

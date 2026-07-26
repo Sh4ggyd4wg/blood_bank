@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — BloodConnect</title>
+    <meta name="description" content="BloodConnect Dashboard - Blood Donation Management System">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="app-layout">
+        <!-- Sidebar -->
+        <div class="sidebar-overlay"></div>
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">🩸</div>
+                <div class="sidebar-brand">
+                    <h2>BloodConnect</h2>
+                    <span>Management System</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section-title">Main</div>
+                <a href="index.html" class="nav-link active">
+                    <span class="nav-icon">📊</span> Dashboard
+                </a>
+                <a href="donors.html" class="nav-link">
+                    <span class="nav-icon">👥</span> Donors
+                </a>
+                <a href="inventory.html" class="nav-link">
+                    <span class="nav-icon">🩸</span> Blood Inventory
+                </a>
+                <a href="requests.html" class="nav-link">
+                    <span class="nav-icon">📋</span> Requests
+                    <span class="badge" data-badge="requests">0</span>
+                </a>
+                <div class="nav-section-title">Administration</div>
+                <a href="admin.html" class="nav-link">
+                    <span class="nav-icon">⚙️</span> Admin Panel
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="avatar">AD</div>
+                    <div class="user-info">
+                        <div class="user-name">Admin User</div>
+                        <div class="user-role">admin</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-header">
+                <div class="header-left">
+                    <button class="menu-toggle">☰</button>
+                    <div class="page-title">
+                        <h1>Dashboard</h1>
+                        <p>Overview of blood bank operations</p>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="header-search">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" placeholder="Search...">
+                    </div>
+                    <button class="header-btn">
+                        🔔
+                        <span class="notif-dot"></span>
+                    </button>
+                    <button class="logout-btn" onclick="logout()">🚪 Logout</button>
+                </div>
+            </header>
+
+            <div class="page-container">
+                <!-- Stats Row -->
+                <div class="stats-grid">
+                    <div class="stat-card red">
+                        <div class="stat-icon">👥</div>
+                        <div class="stat-info">
+                            <h3>Total Donors</h3>
+                            <div class="stat-value" id="dashTotalDonors">0</div>
+                            <div class="stat-change positive" id="dashEligible"></div>
+                        </div>
+                    </div>
+                    <div class="stat-card green">
+                        <div class="stat-icon">🩸</div>
+                        <div class="stat-info">
+                            <h3>Blood Units</h3>
+                            <div class="stat-value" id="dashTotalUnits">0</div>
+                            <div class="stat-change" id="dashTotalLitres"></div>
+                        </div>
+                    </div>
+                    <div class="stat-card amber">
+                        <div class="stat-icon">📋</div>
+                        <div class="stat-info">
+                            <h3>Pending Requests</h3>
+                            <div class="stat-value" id="dashPendingReqs">0</div>
+                            <div class="stat-change" id="dashTotalReqs"></div>
+                        </div>
+                    </div>
+                    <div class="stat-card blue">
+                        <div class="stat-icon">🏥</div>
+                        <div class="stat-info">
+                            <h3>Donations This Month</h3>
+                            <div class="stat-value" id="dashMonthly">0</div>
+                            <div class="stat-change positive" id="dashMonthlyLitres"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid-2-1">
+                    <!-- Blood Inventory Overview -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>🩸 Blood Inventory Status</h3>
+                            <a href="inventory.html" class="btn btn-sm btn-secondary">View All</a>
+                        </div>
+                        <div class="card-body">
+                            <div class="blood-grid" id="dashBloodGrid"></div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Activity -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>🕒 Recent Activity</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="activity-list" id="dashActivity"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Requests -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h3>📋 Recent Blood Requests</h3>
+                        <a href="requests.html" class="btn btn-sm btn-secondary">View All</a>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Hospital</th>
+                                        <th>Blood Group</th>
+                                        <th>Units</th>
+                                        <th>Urgency</th>
+                                        <th>Status</th>
+                                        <th>Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dashRequestTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Eligible Donors -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h3>✅ Eligible Donors Ready to Donate</h3>
+                        <a href="donors.html" class="btn btn-sm btn-secondary">Manage Donors</a>
+                    </div>
+                    <div class="card-body">
+                        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem;"
+                            id="dashEligibleDonors"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const session = requireAuth();
+            if (!session) return;
+            initSidebar();
+            loadDashboard();
+        });
+
+        function loadDashboard() {
+            const donors = getData('donors') || [];
+            const inventory = getData('inventory') || [];
+            const requests = getData('requests') || [];
+            const donations = getData('donations') || [];
+
+            // Stats
+            const eligibleCount = donors.filter(d => checkEligibility(d.lastDonation).eligible).length;
+            const totalUnits = inventory.reduce((s, i) => s + i.units, 0);
+            const totalLitres = inventory.reduce((s, i) => s + i.litres, 0);
+            const pending = requests.filter(r => r.status === 'pending').length;
+            const now = new Date();
+            const monthly = donations.filter(d => {
+                const dd = new Date(d.date);
+                return dd.getMonth() === now.getMonth() && dd.getFullYear() === now.getFullYear();
+            });
+
+            document.getElementById('dashTotalDonors').textContent = donors.length;
+            document.getElementById('dashEligible').textContent = `${eligibleCount} eligible now`;
+            document.getElementById('dashTotalUnits').textContent = totalUnits;
+            document.getElementById('dashTotalLitres').textContent = `${totalLitres.toFixed(1)} litres total`;
+            document.getElementById('dashPendingReqs').textContent = pending;
+            document.getElementById('dashTotalReqs').textContent = `${requests.length} total requests`;
+            document.getElementById('dashMonthly').textContent = monthly.length;
+            document.getElementById('dashMonthlyLitres').textContent = `${(monthly.length * 0.45).toFixed(1)}L donated`;
+
+            // Blood grid mini
+            const grid = document.getElementById('dashBloodGrid');
+            grid.innerHTML = inventory.map(item => {
+                let cls = item.units <= 2 ? 'critical' : item.units <= 5 ? 'low-stock' : '';
+                return `
+          <div class="blood-card ${cls}" style="padding:1rem;">
+            <div class="blood-type" style="font-size:1.4rem;">${item.bloodGroup}</div>
+            <div class="blood-units" style="font-size:1.1rem;">${item.units}</div>
+            <div class="blood-label">units</div>
+          </div>`;
+            }).join('');
+
+            // Recent activity
+            const actContainer = document.getElementById('dashActivity');
+            const activities = [
+                ...requests.slice(-3).reverse().map(r => ({
+                    dot: r.status === 'pending' ? 'amber' : r.status === 'approved' ? 'blue' : 'green',
+                    text: `<strong>${r.hospital}</strong> requested ${r.units}u of <strong>${r.bloodGroup}</strong>`,
+                    time: r.requestDate,
+                })),
+                ...donations.slice(-3).reverse().map(d => ({
+                    dot: 'red',
+                    text: `<strong>${d.donorName}</strong> donated ${d.litres}L (<strong>${d.bloodGroup}</strong>)`,
+                    time: d.date,
+                })),
+            ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 6);
+
+            actContainer.innerHTML = activities.map(a => `
+        <div class="activity-item">
+          <div class="activity-dot ${a.dot}"></div>
+          <div><div class="activity-text">${a.text}</div><div class="activity-time">${formatDate(a.time)}</div></div>
+        </div>`).join('');
+
+            // Recent requests table
+            const reqTbody = document.getElementById('dashRequestTable');
+            const recentReqs = requests.slice(-5).reverse();
+            reqTbody.innerHTML = recentReqs.map(r => {
+                const statusBadge = { pending: 'badge-amber', approved: 'badge-blue', dispatched: 'badge-green', rejected: 'badge-red' }[r.status] || 'badge-gray';
+                const urgencyBadge = { normal: 'badge-gray', urgent: 'badge-amber', critical: 'badge-red' }[r.urgency] || 'badge-gray';
+                return `<tr>
+          <td style="color:var(--text-muted);font-size:0.82rem;">${r.id}</td>
+          <td>${r.hospital}</td>
+          <td><span class="blood-group-chip">${r.bloodGroup}</span></td>
+          <td>${r.units}</td>
+          <td><span class="badge ${urgencyBadge}">${r.urgency}</span></td>
+          <td><span class="badge ${statusBadge}">${r.status}</span></td>
+          <td style="color:var(--text-muted);">${formatDate(r.requestDate)}</td>
+        </tr>`;
+            }).join('');
+
+            // Eligible donors
+            const eligibleDonors = donors.filter(d => checkEligibility(d.lastDonation).eligible).slice(0, 6);
+            const eligContainer = document.getElementById('dashEligibleDonors');
+            eligContainer.innerHTML = eligibleDonors.map(d => `
+        <div class="donor-card">
+          <div class="donor-avatar">${d.name.split(' ').map(n => n[0]).join('')}</div>
+          <div class="donor-details">
+            <div class="donor-name">${d.name}</div>
+            <div class="donor-meta"><span class="blood-group-chip" style="font-size:0.7rem;padding:0.15rem 0.4rem;">${d.bloodGroup}</span> · ${d.totalDonations} donations · ${d.totalLitres.toFixed(1)}L</div>
+          </div>
+          <span class="badge badge-green">Ready</span>
+        </div>`).join('');
+        }
+    </script>
+</body>
+
+</html>

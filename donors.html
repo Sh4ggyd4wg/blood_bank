@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donors — BloodConnect</title>
+    <meta name="description" content="Manage blood donors - BloodConnect">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="app-layout">
+        <div class="sidebar-overlay"></div>
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">🩸</div>
+                <div class="sidebar-brand">
+                    <h2>BloodConnect</h2><span>Management System</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section-title">Main</div>
+                <a href="index.html" class="nav-link"><span class="nav-icon">📊</span> Dashboard</a>
+                <a href="donors.html" class="nav-link"><span class="nav-icon">👥</span> Donors</a>
+                <a href="inventory.html" class="nav-link"><span class="nav-icon">🩸</span> Blood Inventory</a>
+                <a href="requests.html" class="nav-link"><span class="nav-icon">📋</span> Requests <span class="badge"
+                        data-badge="requests">0</span></a>
+                <div class="nav-section-title">Administration</div>
+                <a href="admin.html" class="nav-link"><span class="nav-icon">⚙️</span> Admin Panel</a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="avatar">AD</div>
+                    <div class="user-info">
+                        <div class="user-name">Admin User</div>
+                        <div class="user-role">admin</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="top-header">
+                <div class="header-left">
+                    <button class="menu-toggle">☰</button>
+                    <div class="page-title">
+                        <h1>Donor Management</h1>
+                        <p>Register, search, and manage blood donors</p>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <button class="header-btn">🔔<span class="notif-dot"></span></button>
+                    <button class="logout-btn" onclick="logout()">🚪 Logout</button>
+                </div>
+            </header>
+
+            <div class="page-container">
+                <!-- Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card red">
+                        <div class="stat-icon">👥</div>
+                        <div class="stat-info">
+                            <h3>Total Donors</h3>
+                            <div class="stat-value" id="statTotalDonors">0</div>
+                        </div>
+                    </div>
+                    <div class="stat-card green">
+                        <div class="stat-icon">✅</div>
+                        <div class="stat-info">
+                            <h3>Eligible</h3>
+                            <div class="stat-value" id="statEligible">0</div>
+                        </div>
+                    </div>
+                    <div class="stat-card blue">
+                        <div class="stat-icon">💧</div>
+                        <div class="stat-info">
+                            <h3>Total Donated</h3>
+                            <div class="stat-value" id="statTotalLitres">0L</div>
+                        </div>
+                    </div>
+                    <div class="stat-card purple">
+                        <div class="stat-icon">📅</div>
+                        <div class="stat-info">
+                            <h3>This Month</h3>
+                            <div class="stat-value" id="statThisMonth">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filters & Actions -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>👥 All Donors</h3>
+                        <button class="btn btn-primary" onclick="openModal('addDonorModal')">+ Register Donor</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="filters-bar">
+                            <select id="filterBloodGroup" class="filter-select">
+                                <option value="">All Blood Groups</option>
+                                <option value="A+">A+</option>
+                                <option value="A-">A−</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B−</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB−</option>
+                                <option value="O+">O+</option>
+                                <option value="O-">O−</option>
+                            </select>
+                            <select id="filterStatus" class="filter-select">
+                                <option value="">All Status</option>
+                                <option value="eligible">Eligible</option>
+                                <option value="ineligible">Ineligible</option>
+                            </select>
+                            <input type="text" id="filterSearch" class="filter-search"
+                                placeholder="Search by name, ID, blood group, or phone...">
+                        </div>
+
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Donor</th>
+                                        <th>Blood Group</th>
+                                        <th>Phone</th>
+                                        <th>Donations</th>
+                                        <th>Total Volume</th>
+                                        <th>Last Donation</th>
+                                        <th>Eligibility</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="donorTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add/Edit Donor Modal -->
+    <div class="modal-overlay" id="addDonorModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Register New Donor</h3>
+                <button class="modal-close" onclick="closeModal('addDonorModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="addDonorForm">
+                    <div class="form-group">
+                        <label>Full Name *</label>
+                        <input type="text" name="donorName" class="form-control" placeholder="Enter donor name"
+                            required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" name="donorEmail" class="form-control" placeholder="Email address">
+                        </div>
+                        <div class="form-group">
+                            <label>Phone *</label>
+                            <input type="tel" name="donorPhone" class="form-control" placeholder="Phone number"
+                                required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Blood Group *</label>
+                            <select name="donorBloodGroup" class="form-control" required>
+                                <option value="">Select</option>
+                                <option value="A+">A+</option>
+                                <option value="A-">A−</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B−</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB−</option>
+                                <option value="O+">O+</option>
+                                <option value="O-">O−</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Age</label>
+                            <input type="number" name="donorAge" class="form-control" placeholder="Age (18-65)" min="18"
+                                max="65">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Gender</label>
+                            <select name="donorGender" class="form-control">
+                                <option value="">Select</option>
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Address</label>
+                            <input type="text" name="donorAddress" class="form-control" placeholder="City, State">
+                        </div>
+                    </div>
+                    <div class="modal-footer" style="padding:1rem 0 0;border-top:none;">
+                        <button type="button" class="btn btn-secondary"
+                            onclick="closeModal('addDonorModal')">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Register Donor</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Donor Modal -->
+    <div class="modal-overlay" id="viewDonorModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Donor Profile</h3>
+                <button class="modal-close" onclick="closeModal('viewDonorModal')">✕</button>
+            </div>
+            <div class="modal-body"></div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/donors.js"></script>
+</body>
+
+</html>
