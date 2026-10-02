@@ -10,11 +10,16 @@ document.addEventListener('DOMContentLoaded', () => {
     setupInventorySearch();
 });
 
-function loadInventory() {
-    const inventory = getData('inventory') || [];
-    renderBloodGrid(inventory);
-    renderInventoryTable(inventory);
-    renderInventoryStats(inventory);
+async function loadInventory(searchQuery) {
+    try {
+        const params = searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : '';
+        const inventory = await api(`/inventory${params}`);
+        renderBloodGrid(inventory);
+        renderInventoryTable(inventory);
+        renderInventoryStats(inventory);
+    } catch (err) {
+        showToast(err.message || 'Failed to load inventory', 'error');
+    }
 }
 
 function renderInventoryStats(inventory) {
@@ -85,7 +90,7 @@ function renderInventoryTable(inventory) {
         <td><strong>${item.units}</strong></td>
         <td>${item.litres.toFixed(1)}L</td>
         <td>${statusBadge}</td>
-        <td>${formatDate(item.lastUpdated)}</td>
+        <td>${item.bloodBankName || '—'}</td>
         <td>
           <div class="flex" style="gap:0.35rem;">
             <button class="btn btn-sm btn-success" onclick="adjustStock('${item.bloodGroup}', 1)">+ Add</button>
@@ -96,23 +101,17 @@ function renderInventoryTable(inventory) {
     }).join('');
 }
 
-function adjustStock(bloodGroup, delta) {
-    const inventory = getData('inventory') || [];
-    const item = inventory.find(i => i.bloodGroup === bloodGroup);
-    if (!item) return;
-
-    if (delta < 0 && item.units <= 0) {
-        showToast(`No ${bloodGroup} units available to deduct`, 'error');
-        return;
+async function adjustStock(bloodGroup, delta) {
+    try {
+        const result = await api(`/inventory/${encodeURIComponent(bloodGroup)}/adjust`, {
+            method: 'PUT',
+            body: JSON.stringify({ delta }),
+        });
+        showToast(result.message, delta > 0 ? 'success' : 'warning');
+        loadInventory();
+    } catch (err) {
+        showToast(err.message || 'Failed to adjust stock', 'error');
     }
-
-    item.units += delta;
-    item.litres = parseFloat((item.units * 0.45).toFixed(2));
-    item.lastUpdated = new Date().toISOString().split('T')[0];
-
-    setData('inventory', inventory);
-    showToast(`${bloodGroup} stock ${delta > 0 ? 'increased' : 'decreased'} by 1 unit`, delta > 0 ? 'success' : 'warning');
-    loadInventory();
 }
 
 function setupInventorySearch() {
@@ -120,12 +119,7 @@ function setupInventorySearch() {
     if (!searchInput) return;
 
     searchInput.addEventListener('input', () => {
-        const query = searchInput.value.toUpperCase().trim();
-        const inventory = getData('inventory') || [];
-        const filtered = query
-            ? inventory.filter(i => i.bloodGroup.includes(query))
-            : inventory;
-        renderBloodGrid(filtered);
-        renderInventoryTable(filtered);
+        const query = searchInput.value.trim();
+        loadInventory(query || undefined);
     });
 }

@@ -185,94 +185,70 @@
             loadDashboard();
         });
 
-        function loadDashboard() {
-            const donors = getData('donors') || [];
-            const inventory = getData('inventory') || [];
-            const requests = getData('requests') || [];
-            const donations = getData('donations') || [];
+        async function loadDashboard() {
+            try {
+                const data = await api('/dashboard');
 
-            // Stats
-            const eligibleCount = donors.filter(d => checkEligibility(d.lastDonation).eligible).length;
-            const totalUnits = inventory.reduce((s, i) => s + i.units, 0);
-            const totalLitres = inventory.reduce((s, i) => s + i.litres, 0);
-            const pending = requests.filter(r => r.status === 'pending').length;
-            const now = new Date();
-            const monthly = donations.filter(d => {
-                const dd = new Date(d.date);
-                return dd.getMonth() === now.getMonth() && dd.getFullYear() === now.getFullYear();
-            });
+                // Stats
+                document.getElementById('dashTotalDonors').textContent = data.stats.totalDonors;
+                document.getElementById('dashEligible').textContent = `${data.stats.eligibleCount} eligible now`;
+                document.getElementById('dashTotalUnits').textContent = data.stats.totalUnits;
+                document.getElementById('dashTotalLitres').textContent = `${data.stats.totalLitres} litres total`;
+                document.getElementById('dashPendingReqs').textContent = data.stats.pendingRequests;
+                document.getElementById('dashTotalReqs').textContent = `${data.stats.totalRequests} total requests`;
+                document.getElementById('dashMonthly').textContent = data.stats.monthlyDonations;
+                document.getElementById('dashMonthlyLitres').textContent = `${data.stats.monthlyLitres}L donated`;
 
-            document.getElementById('dashTotalDonors').textContent = donors.length;
-            document.getElementById('dashEligible').textContent = `${eligibleCount} eligible now`;
-            document.getElementById('dashTotalUnits').textContent = totalUnits;
-            document.getElementById('dashTotalLitres').textContent = `${totalLitres.toFixed(1)} litres total`;
-            document.getElementById('dashPendingReqs').textContent = pending;
-            document.getElementById('dashTotalReqs').textContent = `${requests.length} total requests`;
-            document.getElementById('dashMonthly').textContent = monthly.length;
-            document.getElementById('dashMonthlyLitres').textContent = `${(monthly.length * 0.45).toFixed(1)}L donated`;
+                // Blood grid mini
+                const grid = document.getElementById('dashBloodGrid');
+                grid.innerHTML = data.inventory.map(item => {
+                    let cls = item.units <= 2 ? 'critical' : item.units <= 5 ? 'low-stock' : '';
+                    return `
+              <div class="blood-card ${cls}" style="padding:1rem;">
+                <div class="blood-type" style="font-size:1.4rem;">${item.bloodGroup}</div>
+                <div class="blood-units" style="font-size:1.1rem;">${item.units}</div>
+                <div class="blood-label">units</div>
+              </div>`;
+                }).join('');
 
-            // Blood grid mini
-            const grid = document.getElementById('dashBloodGrid');
-            grid.innerHTML = inventory.map(item => {
-                let cls = item.units <= 2 ? 'critical' : item.units <= 5 ? 'low-stock' : '';
-                return `
-          <div class="blood-card ${cls}" style="padding:1rem;">
-            <div class="blood-type" style="font-size:1.4rem;">${item.bloodGroup}</div>
-            <div class="blood-units" style="font-size:1.1rem;">${item.units}</div>
-            <div class="blood-label">units</div>
-          </div>`;
-            }).join('');
+                // Recent activity
+                const actContainer = document.getElementById('dashActivity');
+                actContainer.innerHTML = data.activities.map(a => `
+            <div class="activity-item">
+              <div class="activity-dot ${a.dot}"></div>
+              <div><div class="activity-text">${a.text}</div><div class="activity-time">${formatDate(a.time)}</div></div>
+            </div>`).join('');
 
-            // Recent activity
-            const actContainer = document.getElementById('dashActivity');
-            const activities = [
-                ...requests.slice(-3).reverse().map(r => ({
-                    dot: r.status === 'pending' ? 'amber' : r.status === 'approved' ? 'blue' : 'green',
-                    text: `<strong>${r.hospital}</strong> requested ${r.units}u of <strong>${r.bloodGroup}</strong>`,
-                    time: r.requestDate,
-                })),
-                ...donations.slice(-3).reverse().map(d => ({
-                    dot: 'red',
-                    text: `<strong>${d.donorName}</strong> donated ${d.litres}L (<strong>${d.bloodGroup}</strong>)`,
-                    time: d.date,
-                })),
-            ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 6);
+                // Recent requests table
+                const reqTbody = document.getElementById('dashRequestTable');
+                reqTbody.innerHTML = data.recentRequests.map(r => {
+                    const statusBadge = { pending: 'badge-amber', approved: 'badge-blue', dispatched: 'badge-green', rejected: 'badge-red' }[r.status] || 'badge-gray';
+                    const urgencyBadge = { normal: 'badge-gray', urgent: 'badge-amber', critical: 'badge-red' }[r.urgency] || 'badge-gray';
+                    return `<tr>
+              <td style="color:var(--text-muted);font-size:0.82rem;">R${String(r.id).padStart(3, '0')}</td>
+              <td>${r.hospital}</td>
+              <td><span class="blood-group-chip">${r.bloodGroup}</span></td>
+              <td>${r.units}</td>
+              <td><span class="badge ${urgencyBadge}">${r.urgency}</span></td>
+              <td><span class="badge ${statusBadge}">${r.status}</span></td>
+              <td style="color:var(--text-muted);">${formatDate(r.requestDate)}</td>
+            </tr>`;
+                }).join('');
 
-            actContainer.innerHTML = activities.map(a => `
-        <div class="activity-item">
-          <div class="activity-dot ${a.dot}"></div>
-          <div><div class="activity-text">${a.text}</div><div class="activity-time">${formatDate(a.time)}</div></div>
-        </div>`).join('');
-
-            // Recent requests table
-            const reqTbody = document.getElementById('dashRequestTable');
-            const recentReqs = requests.slice(-5).reverse();
-            reqTbody.innerHTML = recentReqs.map(r => {
-                const statusBadge = { pending: 'badge-amber', approved: 'badge-blue', dispatched: 'badge-green', rejected: 'badge-red' }[r.status] || 'badge-gray';
-                const urgencyBadge = { normal: 'badge-gray', urgent: 'badge-amber', critical: 'badge-red' }[r.urgency] || 'badge-gray';
-                return `<tr>
-          <td style="color:var(--text-muted);font-size:0.82rem;">${r.id}</td>
-          <td>${r.hospital}</td>
-          <td><span class="blood-group-chip">${r.bloodGroup}</span></td>
-          <td>${r.units}</td>
-          <td><span class="badge ${urgencyBadge}">${r.urgency}</span></td>
-          <td><span class="badge ${statusBadge}">${r.status}</span></td>
-          <td style="color:var(--text-muted);">${formatDate(r.requestDate)}</td>
-        </tr>`;
-            }).join('');
-
-            // Eligible donors
-            const eligibleDonors = donors.filter(d => checkEligibility(d.lastDonation).eligible).slice(0, 6);
-            const eligContainer = document.getElementById('dashEligibleDonors');
-            eligContainer.innerHTML = eligibleDonors.map(d => `
-        <div class="donor-card">
-          <div class="donor-avatar">${d.name.split(' ').map(n => n[0]).join('')}</div>
-          <div class="donor-details">
-            <div class="donor-name">${d.name}</div>
-            <div class="donor-meta"><span class="blood-group-chip" style="font-size:0.7rem;padding:0.15rem 0.4rem;">${d.bloodGroup}</span> · ${d.totalDonations} donations · ${d.totalLitres.toFixed(1)}L</div>
-          </div>
-          <span class="badge badge-green">Ready</span>
-        </div>`).join('');
+                // Eligible donors
+                const eligContainer = document.getElementById('dashEligibleDonors');
+                eligContainer.innerHTML = data.eligibleDonors.map(d => `
+            <div class="donor-card">
+              <div class="donor-avatar">${d.name.split(' ').map(n => n[0]).join('')}</div>
+              <div class="donor-details">
+                <div class="donor-name">${d.name}</div>
+                <div class="donor-meta"><span class="blood-group-chip" style="font-size:0.7rem;padding:0.15rem 0.4rem;">${d.bloodGroup}</span></div>
+              </div>
+              <span class="badge badge-green">Ready</span>
+            </div>`).join('');
+            } catch (err) {
+                showToast(err.message || 'Failed to load dashboard', 'error');
+            }
         }
     </script>
 </body>

@@ -3,267 +3,244 @@
    ======================================== */
 
 document.addEventListener('DOMContentLoaded', () => {
-    const session = requireAuth();
-    if (!session) return;
-    initSidebar();
-    initTabs();
-    loadDonors();
-    setupDonorFilters();
-    setupDonorForm();
+  const session = requireAuth();
+  if (!session) return;
+  initSidebar();
+  initTabs();
+  loadDonors();
+  setupDonorFilters();
+  setupDonorForm();
 });
 
-function loadDonors() {
-    const donors = getData('donors') || [];
+async function loadDonors(filters = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (filters.blood_group) params.set('blood_group', filters.blood_group);
+    if (filters.status) params.set('status', filters.status);
+    if (filters.search) params.set('search', filters.search);
+
+    const donors = await api(`/donors?${params.toString()}`);
+    const stats = await api('/donors/stats');
+    renderDonorStats(stats);
     renderDonorTable(donors);
-    renderDonorStats(donors);
+  } catch (err) {
+    showToast(err.message || 'Failed to load donors', 'error');
+  }
 }
 
-function renderDonorStats(donors) {
-    const total = donors.length;
-    const eligible = donors.filter(d => checkEligibility(d.lastDonation).eligible).length;
-    const totalLitres = donors.reduce((sum, d) => sum + d.totalLitres, 0);
-    const thisMonth = donors.filter(d => {
-        if (!d.lastDonation) return false;
-        const ld = new Date(d.lastDonation);
-        const now = new Date();
-        return ld.getMonth() === now.getMonth() && ld.getFullYear() === now.getFullYear();
-    }).length;
-
-    const statEls = {
-        totalDonors: document.getElementById('statTotalDonors'),
-        eligibleDonors: document.getElementById('statEligible'),
-        totalLitres: document.getElementById('statTotalLitres'),
-        thisMonth: document.getElementById('statThisMonth'),
-    };
-
-    if (statEls.totalDonors) statEls.totalDonors.textContent = total;
-    if (statEls.eligibleDonors) statEls.eligibleDonors.textContent = eligible;
-    if (statEls.totalLitres) statEls.totalLitres.textContent = totalLitres.toFixed(1) + 'L';
-    if (statEls.thisMonth) statEls.thisMonth.textContent = thisMonth;
+function renderDonorStats(stats) {
+  const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+  el('statTotalDonors', stats.total);
+  el('statEligible', stats.eligible);
+  el('statIneligible', stats.ineligible);
+  el('statTotalDonations', stats.totalDonations);
 }
 
 function renderDonorTable(donors) {
-    const tbody = document.getElementById('donorTableBody');
-    if (!tbody) return;
+  const tbody = document.getElementById('donorTableBody');
+  if (!tbody) return;
 
-    if (donors.length === 0) {
-        tbody.innerHTML = `
+  if (donors.length === 0) {
+    tbody.innerHTML = `
       <tr><td colspan="8">
         <div class="empty-state">
-          <div class="empty-icon">🩸</div>
+          <div class="empty-icon">👥</div>
           <h3>No donors found</h3>
-          <p>Try adjusting your filters or add a new donor.</p>
+          <p>Register a new donor or adjust your filters.</p>
         </div>
       </td></tr>`;
-        return;
+    return;
+  }
+
+  const session = getSession();
+
+  tbody.innerHTML = donors.map(d => {
+    const elig = checkEligibility(d.lastDonation);
+    const statusBadge = elig.eligible
+      ? '<span class="badge badge-green">Eligible</span>'
+      : `<span class="badge badge-amber">Wait ${elig.daysLeft}d</span>`;
+
+    let actions = `<button class="btn btn-sm btn-secondary" onclick="viewDonor(${d.id})">View</button>`;
+    if (session?.role === 'admin') {
+      actions += ` <button class="btn btn-sm btn-primary" onclick="editDonor(${d.id})">Edit</button>`;
+      actions += ` <button class="btn btn-sm btn-danger" onclick="deleteDonor(${d.id})">Delete</button>`;
     }
 
-    tbody.innerHTML = donors.map(donor => {
-        const elig = checkEligibility(donor.lastDonation);
-        const eligBadge = elig.eligible
-            ? '<span class="badge badge-green">Eligible</span>'
-            : `<span class="badge badge-amber">Wait ${elig.daysLeft}d</span>`;
-
-        return `
+    return `
       <tr>
-        <td>
-          <div class="flex" style="align-items:center;gap:0.75rem;">
-            <div class="donor-avatar" style="width:36px;height:36px;font-size:0.75rem;">${donor.name.split(' ').map(n => n[0]).join('')}</div>
-            <div>
-              <div style="font-weight:600;font-size:0.88rem;">${donor.name}</div>
-              <div style="font-size:0.75rem;color:var(--text-muted);">${donor.id}</div>
-            </div>
-          </div>
-        </td>
-        <td><span class="blood-group-chip">${donor.bloodGroup}</span></td>
-        <td>${donor.phone || '—'}</td>
-        <td>${donor.totalDonations}</td>
-        <td><strong>${donor.totalLitres.toFixed(2)}L</strong></td>
-        <td>${donor.lastDonation ? formatDate(donor.lastDonation) : 'Never'}</td>
-        <td>${eligBadge}</td>
-        <td>
-          <div class="flex" style="gap:0.35rem;">
-            <button class="btn btn-sm btn-secondary" onclick="viewDonor('${donor.id}')" title="View">👁</button>
-            <button class="btn btn-sm btn-secondary" onclick="editDonor('${donor.id}')" title="Edit">✏️</button>
-            <button class="btn btn-sm btn-danger" onclick="deleteDonor('${donor.id}')" title="Delete" style="padding:0.45rem 0.6rem;">🗑</button>
-          </div>
-        </td>
+        <td style="font-weight:600;color:var(--text-muted);font-size:0.82rem;">D${String(d.id).padStart(3, '0')}</td>
+        <td><strong>${d.name}</strong></td>
+        <td><span class="blood-group-chip">${d.bloodGroup}</span></td>
+        <td>${d.gender || '—'}</td>
+        <td>${d.phone || '—'}</td>
+        <td>${formatDate(d.lastDonation)}</td>
+        <td>${statusBadge}</td>
+        <td><div class="flex" style="gap:0.35rem;">${actions}</div></td>
       </tr>`;
-    }).join('');
+  }).join('');
 }
 
 function setupDonorFilters() {
-    const filterBlood = document.getElementById('filterBloodGroup');
-    const filterStatus = document.getElementById('filterStatus');
-    const filterSearch = document.getElementById('filterSearch');
+  const filterBlood = document.getElementById('filterBlood');
+  const filterStatus = document.getElementById('filterStatus');
+  const filterSearch = document.getElementById('filterSearch');
 
-    const applyFilters = () => {
-        let donors = getData('donors') || [];
-        const blood = filterBlood?.value;
-        const status = filterStatus?.value;
-        const search = filterSearch?.value.toLowerCase().trim();
+  const applyFilters = () => {
+    const filters = {};
+    if (filterBlood?.value) filters.blood_group = filterBlood.value;
+    if (filterStatus?.value) filters.status = filterStatus.value;
+    if (filterSearch?.value) filters.search = filterSearch.value.trim();
+    loadDonors(filters);
+  };
 
-        if (blood) donors = donors.filter(d => d.bloodGroup === blood);
-        if (status === 'eligible') donors = donors.filter(d => checkEligibility(d.lastDonation).eligible);
-        if (status === 'ineligible') donors = donors.filter(d => !checkEligibility(d.lastDonation).eligible);
-        if (search) donors = donors.filter(d =>
-            d.name.toLowerCase().includes(search) ||
-            d.id.toLowerCase().includes(search) ||
-            d.bloodGroup.toLowerCase().includes(search) ||
-            d.phone?.includes(search)
-        );
-
-        renderDonorTable(donors);
-    };
-
-    filterBlood?.addEventListener('change', applyFilters);
-    filterStatus?.addEventListener('change', applyFilters);
-    filterSearch?.addEventListener('input', applyFilters);
+  filterBlood?.addEventListener('change', applyFilters);
+  filterStatus?.addEventListener('change', applyFilters);
+  filterSearch?.addEventListener('input', applyFilters);
 }
 
 function setupDonorForm() {
-    const form = document.getElementById('addDonorForm');
-    if (!form) return;
+  const form = document.getElementById('newDonorForm');
+  if (!form) return;
 
-    form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const donors = getData('donors') || [];
-        const formData = new FormData(form);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(form);
 
-        const name = formData.get('donorName')?.trim();
-        const email = formData.get('donorEmail')?.trim();
-        const phone = formData.get('donorPhone')?.trim();
-        const bloodGroup = formData.get('donorBloodGroup');
-        const age = parseInt(formData.get('donorAge'));
-        const gender = formData.get('donorGender');
-        const address = formData.get('donorAddress')?.trim();
+    const name = formData.get('donorName')?.trim();
+    const email = formData.get('donorEmail')?.trim();
+    const phone = formData.get('donorPhone')?.trim();
+    const bloodGroup = formData.get('donorBlood');
+    const gender = formData.get('donorGender');
+    const address = formData.get('donorAddress')?.trim();
+    const dateOfBirth = formData.get('donorDOB');
 
-        if (!name || !bloodGroup || !phone) {
-            showToast('Please fill in all required fields', 'error');
-            return;
-        }
+    if (!name || !bloodGroup) {
+      showToast('Name and blood group are required', 'error');
+      return;
+    }
 
-        if (age && (age < 18 || age > 65)) {
-            showToast('Donor must be between 18 and 65 years old', 'error');
-            return;
-        }
-
-        const newDonor = {
-            id: generateId('D'),
-            name, email, phone, bloodGroup,
-            age: age || 0,
-            gender: gender || '',
-            address: address || '',
-            lastDonation: null,
-            totalDonations: 0,
-            totalLitres: 0,
-            status: 'eligible',
-            registered: new Date().toISOString().split('T')[0],
-        };
-
-        donors.push(newDonor);
-        setData('donors', donors);
-        showToast(`Donor ${name} registered successfully!`, 'success');
-        closeModal('addDonorModal');
-        form.reset();
-        loadDonors();
-    });
+    try {
+      await api('/donors', {
+        method: 'POST',
+        body: JSON.stringify({ name, email, phone, bloodGroup, gender, address, dateOfBirth }),
+      });
+      showToast('Donor registered successfully!', 'success');
+      closeModal('newDonorModal');
+      form.reset();
+      loadDonors();
+    } catch (err) {
+      showToast(err.message || 'Failed to register donor', 'error');
+    }
+  });
 }
 
-function viewDonor(id) {
-    const donors = getData('donors') || [];
-    const donor = donors.find(d => d.id === id);
-    if (!donor) return;
-
-    const elig = checkEligibility(donor.lastDonation);
-    const donations = (getData('donations') || []).filter(d => d.donorId === id);
+async function viewDonor(id) {
+  try {
+    const d = await api(`/donors/${id}`);
+    const elig = checkEligibility(d.lastDonation);
 
     const modal = document.getElementById('viewDonorModal');
     if (!modal) return;
 
     modal.querySelector('.modal-body').innerHTML = `
-    <div style="text-align:center;margin-bottom:1.5rem;">
-      <div class="donor-avatar" style="width:64px;height:64px;font-size:1.4rem;margin:0 auto 0.75rem;">${donor.name.split(' ').map(n => n[0]).join('')}</div>
-      <h3 style="font-size:1.2rem;">${donor.name}</h3>
-      <span class="blood-group-chip" style="margin-top:0.5rem;">${donor.bloodGroup}</span>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
-      <div><span style="font-size:0.75rem;color:var(--text-muted);display:block;">Email</span><span style="font-size:0.88rem;">${donor.email || '—'}</span></div>
-      <div><span style="font-size:0.75rem;color:var(--text-muted);display:block;">Phone</span><span style="font-size:0.88rem;">${donor.phone || '—'}</span></div>
-      <div><span style="font-size:0.75rem;color:var(--text-muted);display:block;">Age / Gender</span><span style="font-size:0.88rem;">${donor.age || '—'} / ${donor.gender || '—'}</span></div>
-      <div><span style="font-size:0.75rem;color:var(--text-muted);display:block;">Address</span><span style="font-size:0.88rem;">${donor.address || '—'}</span></div>
-      <div><span style="font-size:0.75rem;color:var(--text-muted);display:block;">Total Donations</span><span style="font-size:0.88rem;font-weight:700;">${donor.totalDonations}</span></div>
-      <div><span style="font-size:0.75rem;color:var(--text-muted);display:block;">Total Litres</span><span style="font-size:0.88rem;font-weight:700;">${donor.totalLitres.toFixed(2)}L</span></div>
-      <div><span style="font-size:0.75rem;color:var(--text-muted);display:block;">Last Donation</span><span style="font-size:0.88rem;">${donor.lastDonation ? formatDate(donor.lastDonation) : 'Never'}</span></div>
-      <div><span style="font-size:0.75rem;color:var(--text-muted);display:block;">Eligibility</span>${elig.eligible ? '<span class="badge badge-green">Eligible Now</span>' : `<span class="badge badge-amber">Wait ${elig.daysLeft} days</span>`}</div>
-    </div>
-    ${donations.length > 0 ? `
-      <h4 style="font-size:0.9rem;margin-bottom:0.75rem;">Donation History</h4>
-      <div class="table-container">
-        <table class="data-table">
-          <thead><tr><th>Date</th><th>Litres</th><th>Blood Bank</th></tr></thead>
-          <tbody>${donations.map(d => `<tr><td>${formatDate(d.date)}</td><td>${d.litres}L</td><td>${d.bloodBank}</td></tr>`).join('')}</tbody>
-        </table>
-      </div>` : '<p class="text-muted text-center">No donation history yet.</p>'}
-  `;
-
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">
+        <div class="donor-avatar" style="width:56px;height:56px;font-size:1.2rem;">${d.name.split(' ').map(n => n[0]).join('')}</div>
+        <div>
+          <h3 style="margin-bottom:0.2rem;">${d.name}</h3>
+          <span class="blood-group-chip">${d.bloodGroup}</span>
+          ${elig.eligible
+        ? '<span class="badge badge-green" style="margin-left:0.5rem;">Eligible</span>'
+        : `<span class="badge badge-amber" style="margin-left:0.5rem;">Wait ${elig.daysLeft}d</span>`}
+        </div>
+      </div>
+      <div class="detail-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div><label style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Email</label><p>${d.email || '—'}</p></div>
+        <div><label style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Phone</label><p>${d.phone || '—'}</p></div>
+        <div><label style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Gender</label><p>${d.gender || '—'}</p></div>
+        <div><label style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Age</label><p>${d.age || '—'}</p></div>
+        <div><label style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Address</label><p>${d.address || '—'}</p></div>
+        <div><label style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Last Donation</label><p>${formatDate(d.lastDonation)}</p></div>
+        <div><label style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Total Donations</label><p>${d.totalDonations}</p></div>
+        <div><label style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Total Litres</label><p>${d.totalLitres}L</p></div>
+      </div>`;
     openModal('viewDonorModal');
+  } catch (err) {
+    showToast(err.message || 'Failed to load donor details', 'error');
+  }
 }
 
-function editDonor(id) {
-    const donors = getData('donors') || [];
-    const donor = donors.find(d => d.id === id);
-    if (!donor) return;
+async function editDonor(id) {
+  try {
+    const d = await api(`/donors/${id}`);
+    const modal = document.getElementById('editDonorModal');
+    if (!modal) return;
 
-    const form = document.getElementById('addDonorForm');
-    if (!form) return;
+    modal.querySelector('.modal-body').innerHTML = `
+      <form id="editDonorForm">
+        <div class="form-row">
+          <div class="form-group"><label>Name</label><input class="form-control" name="name" value="${d.name}" required></div>
+          <div class="form-group"><label>Email</label><input class="form-control" type="email" name="email" value="${d.email || ''}"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Phone</label><input class="form-control" name="phone" value="${d.phone || ''}"></div>
+          <div class="form-group"><label>Blood Group</label>
+            <select class="form-control" name="bloodGroup">
+              ${['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => `<option ${bg === d.bloodGroup ? 'selected' : ''}>${bg}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Gender</label>
+            <select class="form-control" name="gender">
+              <option value="">—</option>
+              <option ${d.gender === 'Male' ? 'selected' : ''}>Male</option>
+              <option ${d.gender === 'Female' ? 'selected' : ''}>Female</option>
+              <option ${d.gender === 'Other' ? 'selected' : ''}>Other</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Date of Birth</label><input class="form-control" type="date" name="dateOfBirth" value="${d.dateOfBirth ? new Date(d.dateOfBirth).toISOString().split('T')[0] : ''}"></div>
+        </div>
+        <div class="form-group"><label>Address</label><input class="form-control" name="address" value="${d.address || ''}"></div>
+        <button type="submit" class="btn btn-primary btn-block" style="margin-top:1rem;">Save Changes</button>
+      </form>`;
 
-    form.querySelector('[name="donorName"]').value = donor.name;
-    form.querySelector('[name="donorEmail"]').value = donor.email || '';
-    form.querySelector('[name="donorPhone"]').value = donor.phone || '';
-    form.querySelector('[name="donorBloodGroup"]').value = donor.bloodGroup;
-    form.querySelector('[name="donorAge"]').value = donor.age || '';
-    form.querySelector('[name="donorGender"]').value = donor.gender || '';
-    form.querySelector('[name="donorAddress"]').value = donor.address || '';
-
-    // Change modal title
-    const modalTitle = document.querySelector('#addDonorModal .modal-header h3');
-    if (modalTitle) modalTitle.textContent = 'Edit Donor';
-
-    // Swap form submission to update mode
-    const submitBtn = form.querySelector('button[type="submit"]');
-    if (submitBtn) submitBtn.textContent = 'Update Donor';
-
-    form.onsubmit = (e) => {
-        e.preventDefault();
-        const formData = new FormData(form);
-        donor.name = formData.get('donorName')?.trim();
-        donor.email = formData.get('donorEmail')?.trim();
-        donor.phone = formData.get('donorPhone')?.trim();
-        donor.bloodGroup = formData.get('donorBloodGroup');
-        donor.age = parseInt(formData.get('donorAge')) || 0;
-        donor.gender = formData.get('donorGender');
-        donor.address = formData.get('donorAddress')?.trim();
-
-        setData('donors', donors);
-        showToast('Donor updated successfully!', 'success');
-        closeModal('addDonorModal');
-        form.reset();
-        form.onsubmit = null;
-        if (modalTitle) modalTitle.textContent = 'Register New Donor';
-        if (submitBtn) submitBtn.textContent = 'Register Donor';
-        setupDonorForm();
+    const form = modal.querySelector('#editDonorForm');
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      try {
+        await api(`/donors/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            name: fd.get('name'),
+            email: fd.get('email'),
+            phone: fd.get('phone'),
+            bloodGroup: fd.get('bloodGroup'),
+            gender: fd.get('gender'),
+            address: fd.get('address'),
+            dateOfBirth: fd.get('dateOfBirth') || null,
+          }),
+        });
+        showToast('Donor updated!', 'success');
+        closeModal('editDonorModal');
         loadDonors();
+      } catch (err) {
+        showToast(err.message || 'Update failed', 'error');
+      }
     };
-
-    openModal('addDonorModal');
+    openModal('editDonorModal');
+  } catch (err) {
+    showToast(err.message || 'Failed to load donor', 'error');
+  }
 }
 
-function deleteDonor(id) {
-    if (!confirm('Are you sure you want to remove this donor?')) return;
-    let donors = getData('donors') || [];
-    donors = donors.filter(d => d.id !== id);
-    setData('donors', donors);
-    showToast('Donor removed', 'warning');
+async function deleteDonor(id) {
+  if (!confirm('Are you sure you want to delete this donor?')) return;
+  try {
+    await api(`/donors/${id}`, { method: 'DELETE' });
+    showToast('Donor deleted', 'warning');
     loadDonors();
+  } catch (err) {
+    showToast(err.message || 'Delete failed', 'error');
+  }
 }

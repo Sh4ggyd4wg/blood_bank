@@ -11,23 +11,30 @@ document.addEventListener('DOMContentLoaded', () => {
     setupRequestFilters();
 });
 
-function loadRequests() {
-    const requests = getData('requests') || [];
-    renderRequestTable(requests);
-    renderRequestStats(requests);
+async function loadRequests(filters = {}) {
+    try {
+        const params = new URLSearchParams();
+        if (filters.status) params.set('status', filters.status);
+        if (filters.urgency) params.set('urgency', filters.urgency);
+        if (filters.blood_group) params.set('blood_group', filters.blood_group);
+        if (filters.search) params.set('search', filters.search);
+
+        const requests = await api(`/requests?${params.toString()}`);
+        renderRequestTable(requests);
+
+        const stats = await api('/requests/stats');
+        renderRequestStats(stats);
+    } catch (err) {
+        showToast(err.message || 'Failed to load requests', 'error');
+    }
 }
 
-function renderRequestStats(requests) {
-    const total = requests.length;
-    const pending = requests.filter(r => r.status === 'pending').length;
-    const approved = requests.filter(r => r.status === 'approved').length;
-    const dispatched = requests.filter(r => r.status === 'dispatched').length;
-
+function renderRequestStats(stats) {
     const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
-    el('statTotalRequests', total);
-    el('statPending', pending);
-    el('statApproved', approved);
-    el('statDispatched', dispatched);
+    el('statTotalRequests', stats.total);
+    el('statPending', stats.pending);
+    el('statApproved', stats.approved);
+    el('statDispatched', stats.dispatched);
 }
 
 function renderRequestTable(requests) {
@@ -46,7 +53,7 @@ function renderRequestTable(requests) {
         return;
     }
 
-    const session = getData('session');
+    const session = getSession();
 
     tbody.innerHTML = requests.map(req => {
         const statusBadge = {
@@ -66,10 +73,10 @@ function renderRequestTable(requests) {
         if (session?.role === 'admin' || session?.role === 'staff') {
             if (req.status === 'pending') {
                 actions = `
-          <button class="btn btn-sm btn-success" onclick="updateRequestStatus('${req.id}', 'approved')">Approve</button>
-          <button class="btn btn-sm btn-danger" onclick="updateRequestStatus('${req.id}', 'rejected')">Reject</button>`;
+          <button class="btn btn-sm btn-success" onclick="updateRequestStatus(${req.id}, 'approved')">Approve</button>
+          <button class="btn btn-sm btn-danger" onclick="updateRequestStatus(${req.id}, 'rejected')">Reject</button>`;
             } else if (req.status === 'approved') {
-                actions = `<button class="btn btn-sm btn-primary" onclick="updateRequestStatus('${req.id}', 'dispatched')">Dispatch</button>`;
+                actions = `<button class="btn btn-sm btn-primary" onclick="updateRequestStatus(${req.id}, 'dispatched')">Dispatch</button>`;
             } else {
                 actions = '<span class="text-muted" style="font-size:0.8rem;">Completed</span>';
             }
@@ -77,7 +84,7 @@ function renderRequestTable(requests) {
 
         return `
       <tr>
-        <td style="font-weight:600;color:var(--text-muted);font-size:0.82rem;">${req.id}</td>
+        <td style="font-weight:600;color:var(--text-muted);font-size:0.82rem;">R${String(req.id).padStart(3, '0')}</td>
         <td>${req.hospital}</td>
         <td>${req.patient}</td>
         <td><span class="blood-group-chip">${req.bloodGroup}</span></td>
@@ -95,9 +102,8 @@ function setupRequestForm() {
     const form = document.getElementById('newRequestForm');
     if (!form) return;
 
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const requests = getData('requests') || [];
         const formData = new FormData(form);
 
         const hospital = formData.get('reqHospital')?.trim();
@@ -112,63 +118,36 @@ function setupRequestForm() {
             return;
         }
 
-        // Check if stock is available
-        const inventory = getData('inventory') || [];
-        const stock = inventory.find(i => i.bloodGroup === bloodGroup);
-        if (stock && stock.units < units) {
-            showToast(`Only ${stock.units} units of ${bloodGroup} available. Requested ${units}.`, 'warning');
+        try {
+            const result = await api('/requests', {
+                method: 'POST',
+                body: JSON.stringify({ hospital, patient, bloodGroup, units, urgency, notes }),
+            });
+
+            if (result.warning) {
+                showToast(result.warning, 'warning');
+            }
+            showToast('Blood request created successfully!', 'success');
+            closeModal('newRequestModal');
+            form.reset();
+            loadRequests();
+        } catch (err) {
+            showToast(err.message || 'Failed to create request', 'error');
         }
-
-        const newRequest = {
-            id: generateId('R'),
-            hospital, patient, bloodGroup,
-            units, urgency: urgency || 'normal',
-            status: 'pending',
-            notes: notes || '',
-            requestDate: new Date().toISOString().split('T')[0],
-        };
-
-        requests.push(newRequest);
-        setData('requests', requests);
-        showToast('Blood request created successfully!', 'success');
-        closeModal('newRequestModal');
-        form.reset();
-        loadRequests();
     });
 }
 
-function updateRequestStatus(id, newStatus) {
-    const requests = getData('requests') || [];
-    const req = requests.find(r => r.id === id);
-    if (!req) return;
-
-    // If dispatching, deduct from inventory
-    if (newStatus === 'dispatched') {
-        const inventory = getData('inventory') || [];
-        const stock = inventory.find(i => i.bloodGroup === req.bloodGroup);
-        if (stock) {
-            if (stock.units < req.units) {
-                showToast(`Not enough ${req.bloodGroup} stock! Only ${stock.units} units available.`, 'error');
-                return;
-            }
-            stock.units -= req.units;
-            stock.litres = parseFloat((stock.units * 0.45).toFixed(2));
-            stock.lastUpdated = new Date().toISOString().split('T')[0];
-            setData('inventory', inventory);
-        }
+async function updateRequestStatus(id, newStatus) {
+    try {
+        const result = await api(`/requests/${id}/status`, {
+            method: 'PUT',
+            body: JSON.stringify({ status: newStatus }),
+        });
+        showToast(result.message, newStatus === 'rejected' ? 'warning' : 'success');
+        loadRequests();
+    } catch (err) {
+        showToast(err.message || 'Failed to update status', 'error');
     }
-
-    req.status = newStatus;
-    setData('requests', requests);
-
-    const messages = {
-        approved: 'Request approved!',
-        rejected: 'Request rejected.',
-        dispatched: 'Blood dispatched! Inventory updated.',
-    };
-
-    showToast(messages[newStatus] || 'Status updated.', newStatus === 'rejected' ? 'warning' : 'success');
-    loadRequests();
 }
 
 function setupRequestFilters() {
@@ -178,22 +157,12 @@ function setupRequestFilters() {
     const filterSearch = document.getElementById('filterReqSearch');
 
     const applyFilters = () => {
-        let requests = getData('requests') || [];
-        const status = filterStatus?.value;
-        const urgency = filterUrgency?.value;
-        const blood = filterBlood?.value;
-        const search = filterSearch?.value.toLowerCase().trim();
-
-        if (status) requests = requests.filter(r => r.status === status);
-        if (urgency) requests = requests.filter(r => r.urgency === urgency);
-        if (blood) requests = requests.filter(r => r.bloodGroup === blood);
-        if (search) requests = requests.filter(r =>
-            r.hospital.toLowerCase().includes(search) ||
-            r.patient.toLowerCase().includes(search) ||
-            r.id.toLowerCase().includes(search)
-        );
-
-        renderRequestTable(requests);
+        const filters = {};
+        if (filterStatus?.value) filters.status = filterStatus.value;
+        if (filterUrgency?.value) filters.urgency = filterUrgency.value;
+        if (filterBlood?.value) filters.blood_group = filterBlood.value;
+        if (filterSearch?.value) filters.search = filterSearch.value.trim();
+        loadRequests(filters);
     };
 
     filterStatus?.addEventListener('change', applyFilters);
