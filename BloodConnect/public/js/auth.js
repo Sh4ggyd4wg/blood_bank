@@ -1,0 +1,6 @@
+'use strict';
+const signup=document.body.dataset.page==='signup';
+$('content').innerHTML=signup?`<section><p>Donors can register here. Hospital staff accounts are created by an administrator.</p><form id="signupForm"><div class="form-grid">${donorFields()}${field('username','Username')}${field('password','Password','password')}</div><p class="muted">Registration uses the project age range of 18–65. Donation eligibility requires administrator verification.</p><button type="submit" class="btn btn-primary">Create donor account</button></form><p><a href="login.html">Already registered? Log in</a></p></section>`:
+ `<section><form id="loginForm">${field('username','Username')}${field('password','Password','password')}<button type="submit" class="btn btn-primary">Log in</button></form><p><a href="signup.html">Register as a donor</a></p></section>`;
+if(signup)formHandler('signupForm',async(data)=>{await api('/auth/signup',{method:'POST',body:JSON.stringify(data)});$('signupForm').reset();notice('Account created. You can now log in.');});
+else{ $('password').autocomplete='current-password';formHandler('loginForm',async(data)=>{await api('/auth/login',{method:'POST',body:JSON.stringify(data)});location.replace('index.html');});}

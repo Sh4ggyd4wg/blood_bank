@@ -1,0 +1,83 @@
+'use strict';
+let lookups;
+async function lookup(){if(!lookups)lookups=await api('/lookups');return lookups;}
+const sections={dashboard:dashboardPage,donors:donorsPage,donations:donationsPage,inventory:inventoryPage,requests:requestsPage,admin:adminPage};
+document.addEventListener('DOMContentLoaded',async()=>{
+ try{
+  const user=await initialise(),page=document.body.dataset.page;
+  if(user.role==='donor' && page==='dashboard'){location.replace('donors.html');return;}
+  const allowed=user.role==='admin'||(user.role==='donor'&&page==='donors')||(user.role==='staff'&&['dashboard','inventory','requests'].includes(page));
+  if(!allowed){$('content').textContent='This page is not available for your role.';return;}
+  await sections[page]();
+ }catch(err){$('content').textContent='Unable to load this page.';notice(err.message,true);}
+});
+async function dashboardPage(){
+ const d=await api('/dashboard');
+ const counts=Object.fromEntries(d.requests.map(r=>[r.request_status,r.count]));
+ $('content').innerHTML=`<div class="stat-list">${stat('Usable units across banks',d.usableUnits)}${stat('Pending requests',counts.pending||0)}${stat('Approved requests',counts.approved||0)}${stat('Dispatched requests',counts.dispatched||0)}${currentUser.role==='admin'?stat('Registered donors',d.donors)+stat('Donations this month',d.monthlyDonations)+stat('Volume this month',litres(d.monthlyLitres)):''}</div><section><h2>${currentUser.role==='staff'?'Your hospital':'Blood bank administration'}</h2><p>${currentUser.role==='staff'?'Submit a request for your hospital and monitor its status. Availability excludes expired batches.':'Register and verify donors, record completed donations, and process hospital requests.'}</p><p>Approval does not reserve blood. Availability is checked again when blood is dispatched.</p></section>`;
+}
+async function donorsPage(){
+ if(currentUser.role==='donor'){$('pageTitle').textContent='My donor profile';await showDonor('me',true);return;}
+ $('content').innerHTML=`<section><h2>Donor records</h2><form id="filterForm"><div class="form-grid">${field('search','Search name, email, phone or ID','search','',false)}${select('filterGroup','Blood group',[['','All groups'],...groups.map(g=>[g,g])])}${select('filterStatus','Eligibility',[['','All'],['eligible','Eligible'],['ineligible','Ineligible']])}</div><button type="submit" class="btn btn-secondary">Apply filters</button></form><div id="donorList"></div></section><section class="no-print"><h2>Register a donor</h2><p>This creates a donor record. To provide login access, link it to an account in Administration.</p><form id="registerDonor"><div class="form-grid">${donorFields()}</div><button type="submit" class="btn btn-primary">Register donor</button></form></section><section id="donorDetail" hidden></section>`;
+ async function refresh(data={}){const query=new URLSearchParams({search:data.search||'',bloodGroup:data.filterGroup||'',status:data.filterStatus||''});const donors=await api('/donors?'+query);$('donorList').innerHTML=table(['ID','Name','Blood group','Donations','Volume','Eligibility','Actions'],donors.map(d=>[esc(d.donor_id),esc(d.name),esc(d.blood_group),esc(d.total_donations),esc(litres(d.total_litres)),esc(d.reason),button('View / edit','view',d.donor_id)+button('Delete unused','delete',d.donor_id,'danger')]));}
+ $('filterGroup').required=false;$('filterStatus').required=false;
+ formHandler('filterForm',data=>refresh(data));
+ formHandler('registerDonor',async(data,form)=>{const result=await api('/donors',{method:'POST',body:JSON.stringify(data)});form.reset();await refresh();notice(result.message);});
+ $('donorList').addEventListener('click',async(event)=>{const b=event.target.closest('[data-action]');if(!b)return;try{if(b.dataset.action==='view')await showDonor(b.dataset.id,false);else if(confirm('Delete this unused donor record? Linked accounts and donation history prevent deletion.')){await api('/donors/'+b.dataset.id,{method:'DELETE',body:'{}'});await refresh();$('donorDetail').hidden=true;notice('Unused donor record deleted.');}}catch(err){notice(err.message,true);}});
+ await refresh();
+}
+async function showDonor(id,self){
+ const d=await api('/donors/'+id),target=self?$('content'):$('donorDetail');
+ const rawFields=self?field('name','Full name','text',d.name)+field('email','Email','email',d.email)+field('phone','Phone','tel',d.phone,false)+field('address','Address','text',d.address,false):donorFields(d);
+ const fields=rawFields.replace(/(id|for)="/g,'$1="edit-');
+ target.hidden=false;
+ target.innerHTML=`${self?'<section>':''}<h2>${esc(d.name)} · ${esc(d.blood_group)}</h2><p><strong>${esc(d.reason)}</strong></p><p>Last donation: ${esc(d.last_donation_date||'None recorded')}. Project waiting interval: ${esc(d.waitDays)} days.</p><form id="editDonor"><div class="form-grid">${fields}</div>${!self?`<label class="check"><input type="checkbox" name="verified" ${d.verified?'checked':''}> Administrator has verified this donor</label>`:'<p class="muted">Ask an administrator to correct your blood group, date of birth or verification status.</p>'}<button type="submit" class="btn btn-primary">Save profile</button></form><h2>Donation history</h2>${table(['ID','Date','Blood bank','Blood group','Volume'],d.donations.map(r=>[esc(r.donation_id),esc(r.donation_date),esc(r.blood_bank_name),esc(r.blood_group),esc(litres(r.quantity))]))}${self?'</section>':''}`;
+ formHandler('editDonor',async(data)=>{if(!self){data.eligible=data.verified==='on';delete data.verified;}await api('/donors/'+id,{method:'PUT',body:JSON.stringify(data)});if(!self)await donorsPage();await showDonor(id,self);notice('Profile updated.');});
+ if(!self)target.scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function donationsPage(){
+ const [donors,history,{banks}]=await Promise.all([api('/donors'),api('/donations'),lookup()]);
+ const eligible=donors.filter(d=>d.canDonate);
+ $('content').innerHTML=`<section><h2>Record a completed donation</h2><p>One donation adds one project unit (0.45 L). The donation date is assigned as today. Enter the batch expiry date recorded by the administrator.</p>${eligible.length?`<form id="donationForm"><div class="form-grid">${select('donorId','Eligible donor',eligible.map(d=>[d.donor_id,`${d.donor_id} · ${d.name} · ${d.blood_group}`]))}${select('bloodBankId','Blood bank',banks.map(b=>[b.blood_bank_id,b.blood_bank_name]))}${field('expiryDate','Expiry date','date')}</div><label class="check"><input type="checkbox" name="confirmed" required> I verified this donation and confirm it has been completed.</label><button type="submit" class="btn btn-primary">Record donation</button></form>`:'<p>No eligible donors. Register or verify a donor on the Donors page first.</p>'}</section><section><h2>Donation records</h2>${table(['ID','Donor','Blood group','Blood bank','Date','Volume'],history.map(d=>[esc(d.donation_id),esc(d.donor_name),esc(d.blood_group),esc(d.blood_bank_name),esc(d.donation_date),esc(litres(d.quantity))]))}</section>`;
+ if(eligible.length)formHandler('donationForm',async(data)=>{const result=await api('/donations',{method:'POST',body:JSON.stringify({...data,donorId:Number(data.donorId),bloodBankId:Number(data.bloodBankId),confirmed:data.confirmed==='on'})});await donationsPage();notice(result.message);});
+}
+async function inventoryPage(){
+ const data=await api('/inventory');
+ $('content').innerHTML=`<div class="stat-list">${stat('Usable units',data.summary.reduce((s,r)=>s+r.units,0))}${stat('Usable volume',litres(data.summary.reduce((s,r)=>s+r.units,0)*0.45))}${stat('Expired units excluded',data.summary.reduce((s,r)=>s+r.expired_units,0))}</div><section><h2>Availability by blood bank</h2><p>Units are usable through their expiry date. Low means 3–5 units; critical means 0–2 units. Each bank is counted separately.</p>${table(['Blood bank','Blood group','Usable units','Volume','Stock level'],data.summary.map(r=>[esc(r.blood_bank_name),esc(r.blood_group),esc(r.units),esc(litres(r.litres)),esc(r.status)]))}</section>${currentUser.role==='admin'?`<section><h2>Inventory batches</h2><p>Stock increases through recorded donations and decreases through dispatched requests. Expired batches remain visible for history.</p>${table(['Batch ID','Blood bank','Blood group','Remaining units','Expiry date','Availability'],data.batches.map(r=>[esc(r.inventory_id),esc(r.blood_bank_name),esc(r.blood_group),esc(r.quantity),esc(r.expiry_date),esc(r.expired?'Expired':r.quantity?'Usable':'Empty')]))}</section>`:''}`;
+}
+async function requestsPage(){
+ const requests=await api('/requests');
+ let create='';
+ if(currentUser.role==='staff'){
+  lookups=null;const {banks,recipients}=await lookup();
+  create=`<section><h2>Submit a request</h2><p>Hospital: <strong>${esc(currentUser.hospital_name)}</strong></p><form id="requestForm"><div class="form-grid">${select('recipientId','Recipient',[['','New recipient'],...recipients.map(r=>[r.recipient_id,`${r.recipient_id} · ${r.name} · ${r.blood_group}`])])}${field('patientName','New recipient name','text','',false)}${select('bloodGroup','Requested blood group',[['','Choose blood group'],...groups.map(g=>[g,g])])}${select('bloodBankId','Receiving blood bank',banks.map(b=>[b.blood_bank_id,b.blood_bank_name]))}${field('units','Whole units needed','number','1')}${select('priority','Urgency',[['normal','Normal'],['urgent','Urgent'],['critical','Critical']])}${field('notes','Notes','text','',false)}</div><p class="muted">Select an existing recipient only if it is the same person. Names are never used to merge patients automatically.</p><button type="submit" class="btn btn-primary">Submit request</button></form></section>`;
+ }
+ $('content').innerHTML=`${create}<section><h2>${currentUser.role==='staff'?'Your hospital’s requests':'Hospital requests'}</h2><p>Approval checks availability but does not reserve stock. Dispatch checks it again and uses the earliest-expiring usable batches.</p><div class="form-grid">${select('requestFilter','Filter by status',[['','All'],...['pending','approved','dispatched','rejected'].map(s=>[s,s])])}</div><div id="requestList"></div></section>`;
+ function render(){const status=$('requestFilter').value;$('requestList').innerHTML=table(['ID','Hospital / patient','Blood bank','Group','Units','Urgency','Status','Notes','Actions'],requests.filter(r=>!status||r.request_status===status).map(r=>[esc(r.request_id),esc(r.hospital_name)+'<br>'+esc(r.patient_name),esc(r.blood_bank_name),esc(r.blood_group),esc(r.quantity_requested),esc(r.priority),esc(r.request_status),esc(r.notes),currentUser.role==='admin'?(r.request_status==='pending'?button('Approve','approved',r.request_id,'primary')+button('Reject','rejected',r.request_id,'danger'):r.request_status==='approved'?button('Dispatch','dispatched',r.request_id,'primary'):'—'):'—']));}
+ $('requestFilter').addEventListener('change',render);render();
+ $('requestList').addEventListener('click',async(event)=>{const b=event.target.closest('[data-action]');if(!b)return;if(!confirm(`${b.textContent} request #${b.dataset.id}?`))return;b.disabled=true;try{const result=await api('/requests/'+b.dataset.id+'/status',{method:'PUT',body:JSON.stringify({status:b.dataset.action})});await requestsPage();notice(result.message);}catch(err){notice(err.message,true);b.disabled=false;}});
+ if(currentUser.role==='staff'){
+  $('units').min='1';$('units').step='1';$('recipientId').required=false;
+  const recipients=(await lookup()).recipients;
+  function recipientChanged(){const r=recipients.find(r=>String(r.recipient_id)===$('recipientId').value);$('patientName').required=!r;$('patientName').disabled=!!r;if(r){$('patientName').value=r.name;$('bloodGroup').value=r.blood_group;}else $('patientName').value='';}
+  $('recipientId').addEventListener('change',recipientChanged);recipientChanged();
+  formHandler('requestForm',async(data)=>{const result=await api('/requests',{method:'POST',body:JSON.stringify({...data,recipientId:data.recipientId?Number(data.recipientId):null,bloodBankId:Number(data.bloodBankId),units:Number(data.units)})});await requestsPage();notice(result.message);});
+ }
+}
+async function adminPage(){
+ const [users,donors,{hospitals}]=await Promise.all([api('/admin/users'),api('/donors'),lookup()]);
+ const unlinked=donors.filter(d=>!users.some(u=>u.donor_id===d.donor_id));
+ $('content').innerHTML=`<section class="no-print"><h2>Application accounts</h2><div id="userList">${table(['ID','Name','Username','Email','Role','Link','Actions'],users.map(u=>[esc(u.user_id),esc(u.name),esc(u.username),esc(u.email),esc(u.role),esc(u.hospital_name||(u.donor_id?'Donor #'+u.donor_id:'System-wide')),u.user_id===currentUser.user_id?'Current account':button('Delete account','delete-user',u.user_id,'danger')]))}</div><h2>Create account</h2><form id="userForm"><div class="form-grid">${field('username','Username')}${field('password','Password','password')}${select('role','Role',[['staff','Hospital staff'],['donor','Existing donor'],['admin','Administrator']])}${field('name','Staff / administrator name','text','',false)}${field('email','Staff / administrator email','email','',false)}${select('hospitalId','Hospital',hospitals.map(h=>[h.hospital_id,h.hospital_name]))}${select('donorId','Unlinked donor',unlinked.length?unlinked.map(d=>[d.donor_id,`${d.donor_id} · ${d.name}`]):[['','No unlinked donors']])}</div><p class="muted">Donor accounts use the selected donor’s existing name and email. Register the donor first if needed.</p><button type="submit" class="btn btn-primary">Create account</button></form></section><section><h2>System report</h2><div class="actions no-print"><button id="generateReport" class="btn btn-primary">Generate report</button><button id="printReport" class="btn btn-secondary" hidden>Print report</button></div><div id="reportOutput"></div></section>`;
+ function roleChanged(){const donor=$('role').value==='donor',staff=$('role').value==='staff';for(const name of ['name','email']){$(name).required=!donor;$(name).disabled=donor;}$('donorId').disabled=!donor;$('hospitalId').disabled=!staff;}
+ $('role').addEventListener('change',roleChanged);roleChanged();
+ formHandler('userForm',async(data)=>{const result=await api('/admin/users',{method:'POST',body:JSON.stringify({...data,donorId:data.donorId?Number(data.donorId):undefined,hospitalId:data.hospitalId?Number(data.hospitalId):undefined})});await adminPage();notice(result.message);});
+ $('userList').addEventListener('click',async(event)=>{const b=event.target.closest('[data-action]');if(!b||!confirm('Delete this login account? Donation history will be preserved.'))return;try{await api('/admin/users/'+b.dataset.id,{method:'DELETE',body:'{}'});await adminPage();notice('Account deleted.');}catch(err){notice(err.message,true);}});
+ $('generateReport').addEventListener('click',async()=>{try{await generateReport();$('printReport').hidden=false;notice('Report generated.');}catch(err){notice(err.message,true);}});
+ $('printReport').addEventListener('click',()=>window.print());
+}
+async function generateReport(){
+ const [inventory,donations,requests,donors]=await Promise.all([api('/inventory'),api('/donations'),api('/requests'),api('/donors')]);
+ const monthly={};for(const d of donations){const month=d.donation_date.slice(0,7);monthly[month]=(monthly[month]||0)+Number(d.quantity);}
+ const months=Object.keys(monthly).sort().slice(-6),max=Math.max(1,...months.map(m=>monthly[m]));
+ $('reportOutput').innerHTML=`<h2>BloodConnect report</h2><p>Generated ${esc(new Date().toLocaleString())}</p><div class="stat-list">${stat('Donors',donors.length)}${stat('Eligible under project rules',donors.filter(d=>d.canDonate).length)}${stat('Completed donations',donations.length)}${stat('Donated volume',litres(donations.reduce((s,d)=>s+Number(d.quantity),0)))}</div><h3>Donation volume by month</h3>${months.length?months.map(m=>`<div class="chart-row"><span>${esc(m)}</span><meter value="${esc(monthly[m])}" max="${esc(max)}">${esc(monthly[m])}</meter><span>${esc(litres(monthly[m]))}</span></div>`).join(''):'<p>No donations recorded.</p>'}<h3>Usable inventory</h3>${table(['Bank','Blood group','Units','Litres','Stock level'],inventory.summary.map(r=>[esc(r.blood_bank_name),esc(r.blood_group),esc(r.units),esc(litres(r.litres)),esc(r.status)]))}<h3>Request totals</h3>${table(['Status','Count'],['pending','approved','dispatched','rejected'].map(status=>[esc(status),esc(requests.filter(r=>r.request_status===status).length)]))}<h3>Requests</h3>${table(['ID','Hospital','Bank','Group','Units','Status'],requests.map(r=>[esc(r.request_id),esc(r.hospital_name),esc(r.blood_bank_name),esc(r.blood_group),esc(r.quantity_requested),esc(r.request_status)]))}`;
+}
